@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from agent.expense_tools import TOOL_DEFINITIONS, execute_tool
+from agent.expense_tools import TOOL_DEFINITIONS, execute_tool, validate_tool_arguments
 from agent.groq_client import (
     EMPTY_RESPONSE_MESSAGE,
     MAX_ROUNDS_MESSAGE,
@@ -162,6 +162,87 @@ def test_tool_definitions_are_openai_compatible():
     assert {"amount", "description", "category", "expense_date"} <= set(
         add_expense_tool["function"]["parameters"]["properties"]
     )
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "optional_fields", "required_args"),
+    [
+        ("get_expenses", ["start_date", "end_date"], {}),
+        ("get_incomes", ["start_date", "end_date"], {}),
+        (
+            "add_expense",
+            ["payment_method", "notes"],
+            {
+                "amount": 100,
+                "description": "Dinner",
+                "category": "Food",
+                "expense_date": date.today().isoformat(),
+            },
+        ),
+        (
+            "add_income",
+            ["notes"],
+            {
+                "amount": 100,
+                "source": "Salary",
+                "income_date": date.today().isoformat(),
+            },
+        ),
+        (
+            "update_expense",
+            ["payment_method", "notes"],
+            {
+                "expense_id": 1,
+                "amount": 100,
+                "description": "Dinner",
+                "category": "Food",
+                "expense_date": date.today().isoformat(),
+            },
+        ),
+        (
+            "update_income",
+            ["notes"],
+            {
+                "income_id": 1,
+                "amount": 100,
+                "source": "Salary",
+                "income_date": date.today().isoformat(),
+            },
+        ),
+    ],
+)
+def test_optional_string_arguments_accept_null(
+    tool_name, optional_fields, required_args
+):
+    tool = next(
+        tool for tool in TOOL_DEFINITIONS
+        if tool["function"]["name"] == tool_name
+    )
+    properties = tool["function"]["parameters"]["properties"]
+    assert all(
+        properties[field]["type"] == ["string", "null"]
+        for field in optional_fields
+    )
+    args = {**required_args, **dict.fromkeys(optional_fields)}
+    assert validate_tool_arguments(tool_name, args) == required_args
+
+
+def test_get_expenses_with_null_date_filters_lists_all_expenses(db_session):
+    add_expense(
+        db_session,
+        amount=100,
+        description="Dinner",
+        category_name="Food",
+        expense_date=date.today(),
+    )
+
+    result = execute_tool(
+        db_session,
+        "get_expenses",
+        {"start_date": None, "end_date": None},
+    )
+
+    assert [row["description"] for row in result["expenses"]] == ["Dinner"]
 
 
 def test_no_ai_delete_tool_is_exposed(db_session):

@@ -14,6 +14,10 @@ def _string(description: str) -> dict:
     return {"type": "string", "description": description}
 
 
+def _nullable_string(description: str) -> dict:
+    return {"type": ["string", "null"], "description": description}
+
+
 def _number(description: str) -> dict:
     return {"type": "number", "description": description}
 
@@ -43,10 +47,10 @@ TOOL_SCHEMAS: dict[str, dict] = {
                 "description": _string("What the expense was for"),
                 "category": _string("An existing expense category"),
                 "expense_date": _string("Date in YYYY-MM-DD format"),
-                "payment_method": _string(
+                "payment_method": _nullable_string(
                     "One of: " + ", ".join(PAYMENT_METHODS)
                 ),
-                "notes": _string("Optional notes"),
+                "notes": _nullable_string("Optional notes"),
             },
             "required": ["amount", "description", "category", "expense_date"],
             "additionalProperties": False,
@@ -60,7 +64,7 @@ TOOL_SCHEMAS: dict[str, dict] = {
                 "amount": _number("Income amount in INR rupees"),
                 "source": _string("Income source, such as salary"),
                 "income_date": _string("Date in YYYY-MM-DD format"),
-                "notes": _string("Optional notes"),
+                "notes": _nullable_string("Optional notes"),
             },
             "required": ["amount", "source", "income_date"],
             "additionalProperties": False,
@@ -71,8 +75,8 @@ TOOL_SCHEMAS: dict[str, dict] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "start_date": _string("Optional start date YYYY-MM-DD"),
-                "end_date": _string("Optional end date YYYY-MM-DD"),
+                "start_date": _nullable_string("Optional start date YYYY-MM-DD"),
+                "end_date": _nullable_string("Optional end date YYYY-MM-DD"),
             },
             "additionalProperties": False,
         },
@@ -82,8 +86,8 @@ TOOL_SCHEMAS: dict[str, dict] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "start_date": _string("Optional start date YYYY-MM-DD"),
-                "end_date": _string("Optional end date YYYY-MM-DD"),
+                "start_date": _nullable_string("Optional start date YYYY-MM-DD"),
+                "end_date": _nullable_string("Optional end date YYYY-MM-DD"),
             },
             "additionalProperties": False,
         },
@@ -125,10 +129,10 @@ TOOL_SCHEMAS: dict[str, dict] = {
                 "description": _string("New description"),
                 "category": _string("Existing expense category"),
                 "expense_date": _string("New date YYYY-MM-DD"),
-                "payment_method": _string(
+                "payment_method": _nullable_string(
                     "One of: " + ", ".join(PAYMENT_METHODS)
                 ),
-                "notes": _string("Optional notes"),
+                "notes": _nullable_string("Optional notes"),
             },
             "required": [
                 "expense_id",
@@ -152,7 +156,7 @@ TOOL_SCHEMAS: dict[str, dict] = {
                 "amount": _number("New amount in INR rupees"),
                 "source": _string("New income source"),
                 "income_date": _string("New date YYYY-MM-DD"),
-                "notes": _string("Optional notes"),
+                "notes": _nullable_string("Optional notes"),
             },
             "required": ["income_id", "amount", "source", "income_date"],
             "additionalProperties": False,
