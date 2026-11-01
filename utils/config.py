@@ -7,7 +7,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    f"sqlite:///{(PROJECT_ROOT / 'data' / 'expenses.db').as_posix()}",
+    f"sqlite:///{(PROJECT_ROOT / 'data' / 'expenses-single-user.db').as_posix()}",
 )
 CURRENCY = os.getenv("CURRENCY", "INR")
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Kolkata")

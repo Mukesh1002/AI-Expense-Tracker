@@ -218,7 +218,7 @@ def _serialize_calls(message, round_index: int) -> list[dict]:
 
 
 def _execute_call(
-    db, name: str, raw_arguments, executed: dict[str, dict], *, user_id: int
+    db, name: str, raw_arguments, executed: dict[str, dict]
 ) -> dict:
     try:
         args = _parse_tool_arguments(raw_arguments)
@@ -236,7 +236,7 @@ def _execute_call(
         return cached
 
     try:
-        result = execute_tool(db, name, args, user_id=user_id)
+        result = execute_tool(db, name, args)
     except Exception as exc:
         if db is not None:
             db.rollback()
@@ -254,15 +254,12 @@ def run_groq_turn(
     db,
     history: list[dict],
     user_message: str,
-    *,
-    user_id: int,
 ) -> tuple[str, list[dict]]:
     """Run one chat turn, executing only explicitly allow-listed application tools.
 
-    Every tool call is scoped to ``user_id`` so the model can only read or
-    change the signed-in user's records. ``history`` is the plain OpenAI-style
-    message list returned by the previous turn. The system prompt is added fresh
-    to every request and is not stored in the returned history.
+    ``history`` is the plain OpenAI-style message list returned by the previous
+    turn. The system prompt is added fresh to every request and is not stored in
+    the returned history.
     """
     client = _get_client()
     messages: list[dict] = [dict(item) for item in (history or [])]
@@ -284,7 +281,7 @@ def run_groq_turn(
 
         for call in calls:
             result = _execute_call(
-                db, call["name"], call["arguments"], executed, user_id=user_id
+                db, call["name"], call["arguments"], executed
             )
             messages.append(
                 {

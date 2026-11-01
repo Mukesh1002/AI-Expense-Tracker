@@ -21,10 +21,6 @@ from database.models import Expense, Income
 from services.expense_service import add_expense
 from services.income_service import add_income
 
-# Used by tests that never reach a database-backed tool.
-USER_ID = 1
-
-
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -119,7 +115,7 @@ def test_request_uses_configured_model_and_auto_tool_choice(monkeypatch):
     monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-20b")
     completions = install_fake_client(monkeypatch, [assistant_response("Hello.")])
 
-    answer, _ = run_groq_turn(None, [], "hello", user_id=USER_ID)
+    answer, _ = run_groq_turn(None, [], "hello")
 
     assert answer == "Hello."
     request = completions.requests[0]
@@ -168,14 +164,13 @@ def test_tool_definitions_are_openai_compatible():
     )
 
 
-def test_no_ai_delete_tool_is_exposed(db_session, user):
+def test_no_ai_delete_tool_is_exposed(db_session):
     expense = add_expense(
         db_session,
         amount=100,
         description="Tea",
         category_name="Food",
         expense_date=date.today(),
-        user_id=user.id,
     )
 
     with pytest.raises(ValueError, match="Unsupported tool"):
@@ -183,7 +178,6 @@ def test_no_ai_delete_tool_is_exposed(db_session, user):
             db_session,
             "delete_expense",
             {"expense_id": expense.id},
-            user_id=user.id,
         )
 
     assert db_session.get(Expense, expense.id) is not None
@@ -193,7 +187,7 @@ def test_no_ai_delete_tool_is_exposed(db_session, user):
 # Tool-calling flow
 # --------------------------------------------------------------------------- #
 
-def test_function_call_flow_builds_correct_message_history(db_session, user, monkeypatch):
+def test_function_call_flow_builds_correct_message_history(db_session, monkeypatch):
     completions = install_fake_client(
         monkeypatch,
         [
@@ -220,7 +214,7 @@ def test_function_call_flow_builds_correct_message_history(db_session, user, mon
     )
 
     answer, history = run_groq_turn(
-        db_session, [], "I spent 300 rupees on dinner today.", user_id=user.id
+        db_session, [], "I spent 300 rupees on dinner today."
     )
 
     assert answer == "Dinner expense recorded."
@@ -259,7 +253,7 @@ def test_function_call_flow_builds_correct_message_history(db_session, user, mon
     }
 
 
-def test_multiple_tool_calls_in_one_response(db_session, user, monkeypatch):
+def test_multiple_tool_calls_in_one_response(db_session, monkeypatch):
     completions = install_fake_client(
         monkeypatch,
         [
@@ -296,7 +290,7 @@ def test_multiple_tool_calls_in_one_response(db_session, user, monkeypatch):
     )
 
     answer, _ = run_groq_turn(
-        db_session, [], "Dinner 300 and salary 5000 today.", user_id=user.id
+        db_session, [], "Dinner 300 and salary 5000 today."
     )
 
     assert answer == "Recorded both."
@@ -315,7 +309,7 @@ def test_multiple_tool_calls_in_one_response(db_session, user, monkeypatch):
     assert all(json.loads(message["content"])["success"] for message in tool_messages)
 
 
-def test_invalid_json_arguments_are_reported_without_execution(db_session, user, monkeypatch):
+def test_invalid_json_arguments_are_reported_without_execution(db_session, monkeypatch):
     completions = install_fake_client(
         monkeypatch,
         [
@@ -327,7 +321,7 @@ def test_invalid_json_arguments_are_reported_without_execution(db_session, user,
         ],
     )
 
-    answer, _ = run_groq_turn(db_session, [], "Add an expense.", user_id=user.id)
+    answer, _ = run_groq_turn(db_session, [], "Add an expense.")
 
     assert answer == "I could not read that."
     assert db_session.scalars(select(Expense)).all() == []
@@ -336,14 +330,13 @@ def test_invalid_json_arguments_are_reported_without_execution(db_session, user,
     assert "Invalid JSON arguments" in payload["error"]
 
 
-def test_unknown_function_is_reported_without_execution(db_session, user, monkeypatch):
+def test_unknown_function_is_reported_without_execution(db_session, monkeypatch):
     expense = add_expense(
         db_session,
         amount=100,
         description="Tea",
         category_name="Food",
         expense_date=date.today(),
-        user_id=user.id,
     )
     completions = install_fake_client(
         monkeypatch,
@@ -356,9 +349,7 @@ def test_unknown_function_is_reported_without_execution(db_session, user, monkey
         ],
     )
 
-    answer, _ = run_groq_turn(
-        db_session, [], "Delete my tea expense.", user_id=user.id
-    )
+    answer, _ = run_groq_turn(db_session, [], "Delete my tea expense.")
 
     assert answer == "Deletion is not available in chat."
     payload = tool_payload(completions.requests[1], 0)
@@ -367,7 +358,7 @@ def test_unknown_function_is_reported_without_execution(db_session, user, monkey
     assert db_session.get(Expense, expense.id) is not None
 
 
-def test_missing_required_arguments_are_reported(db_session, user, monkeypatch):
+def test_missing_required_arguments_are_reported(db_session, monkeypatch):
     completions = install_fake_client(
         monkeypatch,
         [
@@ -391,7 +382,7 @@ def test_missing_required_arguments_are_reported(db_session, user, monkeypatch):
         ],
     )
 
-    run_groq_turn(db_session, [], "I spent 300 on dinner.", user_id=user.id)
+    run_groq_turn(db_session, [], "I spent 300 on dinner.")
 
     payload = tool_payload(completions.requests[1], 0)
     assert payload["success"] is False
@@ -399,7 +390,7 @@ def test_missing_required_arguments_are_reported(db_session, user, monkeypatch):
     assert db_session.scalars(select(Expense)).all() == []
 
 
-def test_invalid_argument_type_is_reported(db_session, user, monkeypatch):
+def test_invalid_argument_type_is_reported(db_session, monkeypatch):
     completions = install_fake_client(
         monkeypatch,
         [
@@ -424,7 +415,7 @@ def test_invalid_argument_type_is_reported(db_session, user, monkeypatch):
         ],
     )
 
-    run_groq_turn(db_session, [], "I spent some money on dinner.", user_id=user.id)
+    run_groq_turn(db_session, [], "I spent some money on dinner.")
 
     payload = tool_payload(completions.requests[1], 0)
     assert payload["success"] is False
@@ -433,7 +424,7 @@ def test_invalid_argument_type_is_reported(db_session, user, monkeypatch):
 
 
 def test_tool_execution_error_is_reported_and_session_stays_usable(
-    db_session, user, monkeypatch
+    db_session, monkeypatch
 ):
     completions = install_fake_client(
         monkeypatch,
@@ -459,19 +450,15 @@ def test_tool_execution_error_is_reported_and_session_stays_usable(
         ],
     )
 
-    run_groq_turn(
-        db_session, [], "Spend 300 on dinner in Not A Category.", user_id=user.id
-    )
+    run_groq_turn(db_session, [], "Spend 300 on dinner in Not A Category.")
 
     payload = tool_payload(completions.requests[1], 0)
     assert payload["success"] is False
     assert "Unknown or inactive expense category" in payload["error"]
-    assert execute_tool(
-        db_session, "list_expense_categories", {}, user_id=user.id
-    )["categories"]
+    assert execute_tool(db_session, "list_expense_categories", {})["categories"]
 
 
-def test_repeated_identical_tool_call_is_not_executed_twice(db_session, user, monkeypatch):
+def test_repeated_identical_tool_call_is_not_executed_twice(db_session, monkeypatch):
     args = json.dumps(
         {
             "amount": 300,
@@ -494,9 +481,7 @@ def test_repeated_identical_tool_call_is_not_executed_twice(db_session, user, mo
         ],
     )
 
-    answer, _ = run_groq_turn(
-        db_session, [], "I spent 300 on dinner.", user_id=user.id
-    )
+    answer, _ = run_groq_turn(db_session, [], "I spent 300 on dinner.")
 
     assert answer == "Dinner recorded once."
     assert len(db_session.scalars(select(Expense)).all()) == 1
@@ -506,7 +491,7 @@ def test_repeated_identical_tool_call_is_not_executed_twice(db_session, user, mo
     assert "already executed in this turn" in second_payload["note"]
 
 
-def test_maximum_tool_rounds_stops_the_loop(db_session, user, monkeypatch):
+def test_maximum_tool_rounds_stops_the_loop(db_session, monkeypatch):
     monkeypatch.setattr("agent.groq_client.MAX_TOOL_ROUNDS", 3)
     args = json.dumps(
         {
@@ -524,9 +509,7 @@ def test_maximum_tool_rounds_stops_the_loop(db_session, user, monkeypatch):
         ],
     )
 
-    answer, history = run_groq_turn(
-        db_session, [], "I spent 300 on dinner.", user_id=user.id
-    )
+    answer, history = run_groq_turn(db_session, [], "I spent 300 on dinner.")
 
     assert len(completions.requests) == 3
     assert answer == MAX_ROUNDS_MESSAGE
@@ -541,7 +524,7 @@ def test_maximum_tool_rounds_stops_the_loop(db_session, user, monkeypatch):
 def test_empty_model_response_is_handled(monkeypatch):
     install_fake_client(monkeypatch, [assistant_response(None, None)])
 
-    answer, history = run_groq_turn(None, [], "hello", user_id=USER_ID)
+    answer, history = run_groq_turn(None, [], "hello")
 
     assert answer == EMPTY_RESPONSE_MESSAGE
     assert history[-1]["content"] == EMPTY_RESPONSE_MESSAGE
@@ -551,7 +534,7 @@ def test_response_without_choices_is_reported(monkeypatch):
     install_fake_client(monkeypatch, [SimpleNamespace(choices=[])])
 
     with pytest.raises(GroqResponseError, match="no response choices"):
-        run_groq_turn(None, [], "hello", user_id=USER_ID)
+        run_groq_turn(None, [], "hello")
 
 
 def test_api_error_includes_status_without_exposing_key(monkeypatch):
@@ -566,7 +549,7 @@ def test_api_error_includes_status_without_exposing_key(monkeypatch):
     )
 
     with pytest.raises(GroqRequestError) as error:
-        run_groq_turn(None, [], "hello", user_id=USER_ID)
+        run_groq_turn(None, [], "hello")
 
     message = str(error.value)
     assert "HTTP 401" in message
@@ -585,7 +568,7 @@ def test_rate_limit_is_retried_then_succeeds(monkeypatch):
         [FakeRateLimitError("rate limit exceeded"), assistant_response("Recovered.")],
     )
 
-    answer, _ = run_groq_turn(None, [], "hello", user_id=USER_ID)
+    answer, _ = run_groq_turn(None, [], "hello")
 
     assert answer == "Recovered."
     assert len(completions.requests) == 2
@@ -604,7 +587,7 @@ def test_timeout_after_retries_reports_request_error(monkeypatch):
     )
 
     with pytest.raises(GroqRequestError, match="timed out"):
-        run_groq_turn(None, [], "hello", user_id=USER_ID)
+        run_groq_turn(None, [], "hello")
 
     assert len(completions.requests) == 2
 
@@ -621,7 +604,7 @@ def test_transient_error_falls_back_to_alternate_model(monkeypatch):
         [FakeUnavailableError("model overloaded"), assistant_response("Fallback answered.")],
     )
 
-    answer, _ = run_groq_turn(None, [], "hello", user_id=USER_ID)
+    answer, _ = run_groq_turn(None, [], "hello")
 
     assert answer == "Fallback answered."
     assert [request["model"] for request in completions.requests] == [
@@ -643,7 +626,7 @@ def test_transient_error_reports_when_all_models_fail(monkeypatch):
     )
 
     with pytest.raises(GroqRequestError, match="fallback models were also unavailable"):
-        run_groq_turn(None, [], "hello", user_id=USER_ID)
+        run_groq_turn(None, [], "hello")
 
 
 def test_sanitize_error_message_redacts_secrets(monkeypatch):
@@ -664,14 +647,13 @@ def test_sanitize_error_message_redacts_secrets(monkeypatch):
 # Updates and conversation history
 # --------------------------------------------------------------------------- #
 
-def test_update_expense_function_call_updates_existing_row(db_session, user, monkeypatch):
+def test_update_expense_function_call_updates_existing_row(db_session, monkeypatch):
     expense = add_expense(
         db_session,
         amount=300,
         description="Dinner",
         category_name="Food",
         expense_date=date.today(),
-        user_id=user.id,
         payment_method="UPI",
     )
     expense_id = expense.id
@@ -702,7 +684,7 @@ def test_update_expense_function_call_updates_existing_row(db_session, user, mon
     )
 
     answer, _ = run_groq_turn(
-        db_session, [], "Update my dinner expense to 450 rupees.", user_id=user.id
+        db_session, [], "Update my dinner expense to 450 rupees."
     )
 
     updated = db_session.scalar(select(Expense))
@@ -712,13 +694,12 @@ def test_update_expense_function_call_updates_existing_row(db_session, user, mon
     assert len(db_session.scalars(select(Expense)).all()) == 1
 
 
-def test_update_income_function_call_updates_existing_row(db_session, user, monkeypatch):
+def test_update_income_function_call_updates_existing_row(db_session, monkeypatch):
     income = add_income(
         db_session,
         amount=5000,
         source="Salary",
         income_date=date.today(),
-        user_id=user.id,
     )
     income_id = income.id
     install_fake_client(
@@ -745,9 +726,7 @@ def test_update_income_function_call_updates_existing_row(db_session, user, monk
         ],
     )
 
-    answer, _ = run_groq_turn(
-        db_session, [], "Update my salary to 6000.", user_id=user.id
-    )
+    answer, _ = run_groq_turn(db_session, [], "Update my salary to 6000.")
 
     updated = db_session.scalar(select(Income))
     assert answer == "Income updated."
@@ -762,8 +741,8 @@ def test_history_is_reused_across_turns(monkeypatch):
         [assistant_response("First answer."), assistant_response("Second answer.")],
     )
 
-    _, history = run_groq_turn(None, [], "First question", user_id=USER_ID)
-    answer, _ = run_groq_turn(None, history, "Second question", user_id=USER_ID)
+    _, history = run_groq_turn(None, [], "First question")
+    answer, _ = run_groq_turn(None, history, "Second question")
 
     assert answer == "Second answer."
     second_request_messages = completions.requests[1]["messages"]

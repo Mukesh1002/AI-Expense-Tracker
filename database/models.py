@@ -8,34 +8,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(DeclarativeBase):
     pass
 
-class User(Base):
-    """A person who signed in with Google OpenID Connect.
-
-    ``google_sub`` is Google's stable subject identifier. It is the external
-    identity key; email and display name can change and are kept in sync on
-    each login.
-    """
-
-    __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("google_sub", name="uq_users_google_sub"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    google_sub: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
-    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    given_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    family_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    picture_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    locale: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    expenses: Mapped[list["Expense"]] = relationship(back_populates="user")
-    income: Mapped[list["Income"]] = relationship(back_populates="user")
-    conversations: Mapped[list["AgentConversation"]] = relationship(back_populates="user")
-
 class Category(Base):
     __tablename__ = "categories"
     __table_args__ = (UniqueConstraint("name", "type", name="uq_category_name_type"),)
@@ -64,14 +36,10 @@ class Expense(Base):
     expense_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="MANUAL")
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     category: Mapped[Category] = relationship(back_populates="expenses")
-    user: Mapped["User"] = relationship(back_populates="expenses")
 
 class Income(Base):
     __tablename__ = "income"
@@ -85,12 +53,7 @@ class Income(Base):
     source: Mapped[str] = mapped_column(String(100), nullable=False)
     income_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    user: Mapped["User"] = relationship(back_populates="income")
 
 class Budget(Base):
     __tablename__ = "budgets"
@@ -128,9 +91,4 @@ class AgentConversation(Base):
     session_id: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    user: Mapped["User"] = relationship(back_populates="conversations")

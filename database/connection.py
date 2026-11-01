@@ -13,7 +13,7 @@ engine = create_engine(
 if DATABASE_URL.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
-        """SQLite disables foreign keys by default; enforce owner integrity."""
+        """SQLite disables foreign keys by default; enforce relational integrity."""
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()

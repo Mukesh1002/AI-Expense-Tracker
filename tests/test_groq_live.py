@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_live_groq_function_calling_round_trip(db_session, user):
+def test_live_groq_function_calling_round_trip(db_session):
     from agent.groq_client import get_model_name, run_groq_turn
 
     answer, history = run_groq_turn(
@@ -30,7 +30,6 @@ def test_live_groq_function_calling_round_trip(db_session, user):
         [],
         "I spent 321 rupees on a live-test dinner today. "
         "Use the Food category and UPI as the payment method.",
-        user_id=user.id,
     )
 
     assert isinstance(answer, str) and answer.strip()
@@ -50,14 +49,13 @@ def test_live_groq_function_calling_round_trip(db_session, user):
     assert get_model_name()
 
 
-def test_live_groq_read_only_turn(db_session, user):
+def test_live_groq_read_only_turn(db_session):
     from agent.groq_client import run_groq_turn
 
     answer, _ = run_groq_turn(
         db_session,
         [],
         "Show my expenses for October 2026.",
-        user_id=user.id,
     )
 
     assert isinstance(answer, str) and answer.strip()

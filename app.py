@@ -2,45 +2,18 @@ import streamlit as st
 from datetime import date
 from sqlalchemy import func, select
 
-from auth.streamlit_auth import (
-    is_logged_in,
-    render_login_page,
-    render_user_sidebar,
-    resolve_authenticated_user,
-    user_session_key,
-)
 from database.init_db import initialize_database
 from database.connection import SessionLocal
 from database.models import Category, Expense, Income
 from services.expense_service import add_expense, list_expenses, delete_expense, update_expense
-from services.income_service import add_income, list_incomes, update_income
+from services.income_service import add_income, list_incomes, update_income, delete_income
 from utils.money import paise_to_rupees
 
 st.set_page_config(page_title="AI Expense Tracker", page_icon="💰", layout="wide")
 initialize_database()
 
-# Authentication gate: every page requires a Google OIDC session.
-if not is_logged_in():
-    render_login_page()
-    st.stop()
-
-with SessionLocal() as auth_db:
-    try:
-        account = resolve_authenticated_user(auth_db)
-    except Exception as exc:
-        st.error("We couldn't load your account. Please try again.")
-        st.caption(f"Diagnostic: {type(exc).__name__}")
-        st.stop()
-
-if account is None:
-    render_login_page()
-    st.stop()
-
-user_id = account.id
-
 st.title("💰 My Expense Tracker")
 st.caption("Personal finance · INR · Asia/Kolkata")
-render_user_sidebar(st.session_state.get("auth_user", {}))
 
 def money(paise: int) -> str:
     return f"₹{paise_to_rupees(paise):,.2f}"
@@ -55,7 +28,7 @@ def get_category_names(db):
 page = st.sidebar.radio(
     "Navigation",
     ["Dashboard", "AI Assistant", "Add Expense", "Add Income", "Transactions"],
-    key=user_session_key(user_id, "page"),
+    key="page",
 )
 
 with SessionLocal() as db:
@@ -63,7 +36,7 @@ with SessionLocal() as db:
 
     if page == "AI Assistant":
         from frontend.chat import render_chat
-        render_chat(user_id)
+        render_chat()
 
     elif page == "Dashboard":
         st.subheader("Overview")
@@ -71,7 +44,6 @@ with SessionLocal() as db:
         expense_total = db.scalar(
             select(func.coalesce(func.sum(Expense.amount_paise), 0))
             .where(
-                Expense.user_id == user_id,
                 Expense.expense_date >= month_start,
                 Expense.expense_date <= today,
             )
@@ -79,7 +51,6 @@ with SessionLocal() as db:
         income_total = db.scalar(
             select(func.coalesce(func.sum(Income.amount_paise), 0))
             .where(
-                Income.user_id == user_id,
                 Income.income_date >= month_start,
                 Income.income_date <= today,
             )
@@ -87,7 +58,6 @@ with SessionLocal() as db:
         expense_count = db.scalar(
             select(func.count(Expense.id))
             .where(
-                Expense.user_id == user_id,
                 Expense.expense_date >= month_start,
                 Expense.expense_date <= today,
             )
@@ -104,7 +74,6 @@ with SessionLocal() as db:
             select(Category.name, func.sum(Expense.amount_paise))
             .join(Expense, Expense.category_id == Category.id)
             .where(
-                Expense.user_id == user_id,
                 Expense.expense_date >= month_start,
                 Expense.expense_date <= today,
             )
@@ -124,7 +93,6 @@ with SessionLocal() as db:
         st.subheader("Recent transactions")
         recent = db.scalars(
             select(Expense)
-            .where(Expense.user_id == user_id)
             .order_by(Expense.expense_date.desc(), Expense.id.desc())
             .limit(8)
         ).all()
@@ -149,26 +117,26 @@ with SessionLocal() as db:
         with st.form("expense_form", clear_on_submit=True):
             amount = st.number_input(
                 "Amount (₹)", min_value=0.01, step=10.0, format="%.2f",
-                key=user_session_key(user_id, "add_expense_amount"),
+                key="add_expense_amount",
             )
             description = st.text_input(
                 "Description", placeholder="e.g. Dinner",
-                key=user_session_key(user_id, "add_expense_description"),
+                key="add_expense_description",
             )
             category = st.selectbox(
-                "Category", categories, key=user_session_key(user_id, "add_expense_category")
+                "Category", categories, key="add_expense_category"
             )
             payment = st.selectbox(
                 "Payment method",
                 ["UPI", "Cash", "Debit Card", "Credit Card", "Net Banking", "Other"],
-                key=user_session_key(user_id, "add_expense_payment"),
+                key="add_expense_payment",
             )
             expense_date = st.date_input(
                 "Expense date", value=today,
-                key=user_session_key(user_id, "add_expense_date")
+                key="add_expense_date"
             )
             notes = st.text_area(
-                "Notes (optional)", key=user_session_key(user_id, "add_expense_notes")
+                "Notes (optional)", key="add_expense_notes"
             )
             submitted = st.form_submit_button("Save expense", type="primary")
 
@@ -177,7 +145,6 @@ with SessionLocal() as db:
                 item = add_expense(
                     db, amount=amount, description=description,
                     category_name=category, expense_date=expense_date,
-                    user_id=user_id,
                     payment_method=payment, notes=notes or None, source="MANUAL",
                 )
                 st.success(f"Saved {money(item.amount_paise)} for {item.description}.")
@@ -189,18 +156,18 @@ with SessionLocal() as db:
         with st.form("income_form", clear_on_submit=True):
             amount = st.number_input(
                 "Amount (₹)", min_value=0.01, step=500.0, format="%.2f",
-                key=user_session_key(user_id, "add_income_amount"),
+                key="add_income_amount",
             )
             source = st.text_input(
                 "Income source", placeholder="e.g. Salary",
-                key=user_session_key(user_id, "add_income_source"),
+                key="add_income_source",
             )
             income_date = st.date_input(
                 "Received date", value=today,
-                key=user_session_key(user_id, "add_income_date")
+                key="add_income_date"
             )
             notes = st.text_area(
-                "Notes (optional)", key=user_session_key(user_id, "add_income_notes")
+                "Notes (optional)", key="add_income_notes"
             )
             submitted = st.form_submit_button("Save income", type="primary")
 
@@ -208,7 +175,7 @@ with SessionLocal() as db:
             try:
                 item = add_income(
                     db, amount=amount, source=source,
-                    income_date=income_date, user_id=user_id,
+                    income_date=income_date,
                     notes=notes or None,
                 )
                 st.success(f"Saved income of {money(item.amount_paise)} from {item.source}.")
@@ -217,7 +184,7 @@ with SessionLocal() as db:
 
     elif page == "Transactions":
         st.subheader("Expense transactions")
-        all_expenses = list_expenses(db, user_id=user_id)
+        all_expenses = list_expenses(db)
         if not all_expenses:
             st.info("No expenses recorded yet.")
         else:
@@ -238,7 +205,7 @@ with SessionLocal() as db:
             }
             selected_expense_label = st.selectbox(
                 "Choose an expense to edit", list(expense_options),
-                key=user_session_key(user_id, "edit_expense_select"),
+                key="edit_expense_select",
             )
             selected_expense = next(
                 item for item in all_expenses
@@ -255,36 +222,36 @@ with SessionLocal() as db:
                     "Amount (₹)", min_value=0.01,
                     value=float(selected_expense.amount_paise / 100),
                     step=10.0, format="%.2f",
-                    key=user_session_key(user_id, "edit_expense_amount"),
+                    key="edit_expense_amount",
                 )
                 edit_description = st.text_input(
                     "Description", value=selected_expense.description,
-                    key=user_session_key(user_id, "edit_expense_description"),
+                    key="edit_expense_description",
                 )
                 edit_category = st.selectbox(
                     "Category", categories,
                     index=categories.index(selected_expense.category.name),
-                    key=user_session_key(user_id, "edit_expense_category"),
+                    key="edit_expense_category",
                 )
                 edit_payment = st.selectbox(
                     "Payment method", payment_options,
                     index=payment_options.index(current_payment),
-                    key=user_session_key(user_id, "edit_expense_payment"),
+                    key="edit_expense_payment",
                 )
                 edit_date = st.date_input(
                     "Expense date", value=selected_expense.expense_date,
-                    key=user_session_key(user_id, "edit_expense_date"),
+                    key="edit_expense_date",
                 )
                 edit_notes = st.text_area(
                     "Notes", value=selected_expense.notes or "",
-                    key=user_session_key(user_id, "edit_expense_notes"),
+                    key="edit_expense_notes",
                 )
                 save_edit = st.form_submit_button("Save changes", type="primary")
 
             if save_edit:
                 try:
                     updated = update_expense(
-                        db, selected_expense.id, user_id=user_id,
+                        db, selected_expense.id,
                         amount=edit_amount,
                         description=edit_description, category_name=edit_category,
                         expense_date=edit_date, payment_method=edit_payment,
@@ -299,13 +266,13 @@ with SessionLocal() as db:
             st.markdown("### Delete an expense")
             confirm = st.checkbox(
                 "I understand this will permanently delete the selected expense.",
-                key=user_session_key(user_id, "confirm_delete_expense"),
+                key="confirm_delete_expense",
             )
             if st.button(
                 "Delete selected expense", disabled=not confirm,
-                key=user_session_key(user_id, "delete_expense"),
+                key="delete_expense",
             ):
-                if delete_expense(db, selected_expense.id, user_id=user_id):
+                if delete_expense(db, selected_expense.id):
                     st.success("Expense deleted.")
                     st.rerun()
                 else:
@@ -313,7 +280,7 @@ with SessionLocal() as db:
 
         st.divider()
         st.subheader("Income transactions")
-        incomes = list_incomes(db, user_id=user_id)
+        incomes = list_incomes(db)
         if incomes:
             st.dataframe(
                 [{
@@ -330,7 +297,7 @@ with SessionLocal() as db:
             }
             selected_income_label = st.selectbox(
                 "Choose income to edit", list(income_options),
-                key=user_session_key(user_id, "edit_income_select"),
+                key="edit_income_select",
             )
             selected_income = next(
                 item for item in incomes
@@ -341,25 +308,25 @@ with SessionLocal() as db:
                     "Amount (₹)", min_value=0.01,
                     value=float(selected_income.amount_paise / 100),
                     step=500.0, format="%.2f",
-                    key=user_session_key(user_id, "edit_income_amount"),
+                    key="edit_income_amount",
                 )
                 income_source = st.text_input(
                     "Income source", value=selected_income.source,
-                    key=user_session_key(user_id, "edit_income_source"),
+                    key="edit_income_source",
                 )
                 income_date_edit = st.date_input(
                     "Received date", value=selected_income.income_date,
-                    key=user_session_key(user_id, "edit_income_date"),
+                    key="edit_income_date",
                 )
                 income_notes = st.text_area(
                     "Notes", value=selected_income.notes or "",
-                    key=user_session_key(user_id, "edit_income_notes"),
+                    key="edit_income_notes",
                 )
                 save_income_edit = st.form_submit_button("Save income changes")
             if save_income_edit:
                 try:
                     updated_income = update_income(
-                        db, selected_income.id, user_id=user_id,
+                        db, selected_income.id,
                         amount=income_amount,
                         source=income_source, income_date=income_date_edit,
                         notes=income_notes or None,
@@ -368,5 +335,21 @@ with SessionLocal() as db:
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
+
+            st.markdown("### Delete income")
+            confirm_income_delete = st.checkbox(
+                "I understand this will permanently delete the selected income.",
+                key="confirm_delete_income",
+            )
+            if st.button(
+                "Delete selected income",
+                disabled=not confirm_income_delete,
+                key="delete_income",
+            ):
+                if delete_income(db, selected_income.id):
+                    st.success("Income deleted.")
+                    st.rerun()
+                else:
+                    st.error("That income could not be found.")
         else:
             st.info("No income recorded yet.")

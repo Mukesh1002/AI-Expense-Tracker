@@ -1,7 +1,7 @@
 """Baseline schema created by the original single-user application.
 
-This revision exists so existing databases can be stamped at the baseline and
-then upgraded. New databases get the same schema from this migration.
+The application initializes this schema from its SQLAlchemy models. This
+revision remains available for explicitly managed single-user databases.
 
 Revision ID: 0001_initial_schema
 Revises:

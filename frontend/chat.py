@@ -1,7 +1,6 @@
 import streamlit as st
 
 from agent.groq_client import get_model_name, run_groq_turn, sanitize_error_message
-from auth.streamlit_auth import user_session_key
 from database.connection import SessionLocal
 
 
@@ -34,9 +33,9 @@ def _show_chat_error(exc: Exception) -> str:
     return "I couldn't complete that request. Please try again."
 
 
-def render_chat(user_id: int):
-    messages_key = f"groq_chat_{user_id}_messages"
-    history_key = f"groq_chat_{user_id}_history"
+def render_chat():
+    messages_key = "groq_chat_messages"
+    history_key = "groq_chat_history"
 
     st.subheader("🤖 Personal Expense Assistant")
     st.caption(
@@ -52,7 +51,7 @@ def render_chat(user_id: int):
     with st.sidebar:
         if st.button(
             "Clear AI chat",
-            key=user_session_key(user_id, "clear_groq_chat"),
+            key="clear_groq_chat",
         ):
             st.session_state[messages_key] = []
             st.session_state[history_key] = []
@@ -64,7 +63,7 @@ def render_chat(user_id: int):
 
     prompt = st.chat_input(
         "Example: I spent ₹450 on dinner today",
-        key=user_session_key(user_id, "groq_chat_prompt"),
+        key="groq_chat_prompt",
     )
     if prompt:
         st.session_state[messages_key].append(
@@ -81,7 +80,6 @@ def render_chat(user_id: int):
                             db,
                             st.session_state[history_key],
                             prompt,
-                            user_id=user_id,
                         )
                     st.session_state[history_key] = history
                     st.markdown(answer)

@@ -4,7 +4,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.models import Category, Expense
-from services.user_service import require_user, validate_user_id
 from utils.money import rupees_to_paise
 
 
@@ -28,13 +27,10 @@ def add_expense(
     description: str,
     category_name: str,
     expense_date: date,
-    user_id: int,
     payment_method: str | None = None,
     notes: str | None = None,
     source: str = "MANUAL",
 ) -> Expense:
-    user_id = require_user(db, user_id)
-
     description = description.strip()
     if not description:
         raise ValueError("Description is required.")
@@ -49,7 +45,6 @@ def add_expense(
         payment_method=payment_method,
         notes=notes,
         source=source.upper(),
-        user_id=user_id,
     )
     db.add(expense)
     db.commit()
@@ -60,16 +55,10 @@ def add_expense(
 def list_expenses(
     db: Session,
     *,
-    user_id: int,
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> list[Expense]:
-    user_id = validate_user_id(user_id)
-    query = (
-        select(Expense)
-        .where(Expense.user_id == user_id)
-        .order_by(Expense.expense_date.desc(), Expense.id.desc())
-    )
+    query = select(Expense).order_by(Expense.expense_date.desc(), Expense.id.desc())
     if start_date:
         query = query.where(Expense.expense_date >= start_date)
     if end_date:
@@ -77,14 +66,8 @@ def list_expenses(
     return list(db.scalars(query).all())
 
 
-def delete_expense(db: Session, expense_id: int, *, user_id: int) -> bool:
-    user_id = validate_user_id(user_id)
-    expense = db.scalar(
-        select(Expense).where(
-            Expense.id == expense_id,
-            Expense.user_id == user_id,
-        )
-    )
+def delete_expense(db: Session, expense_id: int) -> bool:
+    expense = db.get(Expense, expense_id)
     if expense is None:
         return False
     db.delete(expense)
@@ -96,7 +79,6 @@ def update_expense(
     db: Session,
     expense_id: int,
     *,
-    user_id: int,
     amount: str | int | float,
     description: str,
     category_name: str,
@@ -104,13 +86,7 @@ def update_expense(
     payment_method: str | None = None,
     notes: str | None = None,
 ) -> Expense:
-    user_id = validate_user_id(user_id)
-    expense = db.scalar(
-        select(Expense).where(
-            Expense.id == expense_id,
-            Expense.user_id == user_id,
-        )
-    )
+    expense = db.get(Expense, expense_id)
     if expense is None:
         raise ValueError("Expense not found.")
 

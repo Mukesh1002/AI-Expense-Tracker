@@ -5,7 +5,6 @@ from sqlalchemy import func, select
 from database.models import Category, Expense, Income
 from services.expense_service import add_expense, list_expenses, update_expense
 from services.income_service import add_income, list_incomes, update_income
-from services.user_service import validate_user_id
 from utils.money import paise_to_rupees
 
 PAYMENT_METHODS = ["UPI", "Cash", "Debit Card", "Credit Card", "Net Banking", "Other"]
@@ -251,9 +250,8 @@ def _date(value: str) -> date:
         raise ValueError("Date must be in YYYY-MM-DD format.") from exc
 
 
-def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
-    """Dispatch an allow-listed AI tool call scoped to one authenticated user."""
-    user_id = validate_user_id(user_id)
+def execute_tool(db, name: str, args: dict) -> dict:
+    """Dispatch an allow-listed AI tool call through the application services."""
     args = validate_tool_arguments(name, args)
 
     if name == "list_expense_categories":
@@ -271,7 +269,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
             description=args["description"],
             category_name=args["category"],
             expense_date=_date(args["expense_date"]),
-            user_id=user_id,
             payment_method=args.get("payment_method"),
             notes=args.get("notes"),
             source="AI_CHAT",
@@ -292,7 +289,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
             amount=args["amount"],
             source=args["source"],
             income_date=_date(args["income_date"]),
-            user_id=user_id,
             notes=args.get("notes"),
         )
         return {
@@ -306,7 +302,7 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
     if name == "get_expenses":
         start = _date(args["start_date"]) if args.get("start_date") else None
         end = _date(args["end_date"]) if args.get("end_date") else None
-        rows = list_expenses(db, user_id=user_id, start_date=start, end_date=end)
+        rows = list_expenses(db, start_date=start, end_date=end)
         return {
             "expenses": [
                 {
@@ -326,9 +322,7 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
     if name == "get_incomes":
         start = _date(args["start_date"]) if args.get("start_date") else None
         end = _date(args["end_date"]) if args.get("end_date") else None
-        rows = list_incomes(
-            db, user_id=user_id, start_date=start, end_date=end
-        )
+        rows = list_incomes(db, start_date=start, end_date=end)
         return {
             "incomes": [
                 {
@@ -354,7 +348,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
         expenses = db.scalar(
             select(func.coalesce(func.sum(Expense.amount_paise), 0))
             .where(
-                Expense.user_id == user_id,
                 Expense.expense_date >= start,
                 Expense.expense_date < end,
             )
@@ -362,7 +355,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
         income = db.scalar(
             select(func.coalesce(func.sum(Income.amount_paise), 0))
             .where(
-                Income.user_id == user_id,
                 Income.income_date >= start,
                 Income.income_date < end,
             )
@@ -370,7 +362,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
         count = db.scalar(
             select(func.count(Expense.id))
             .where(
-                Expense.user_id == user_id,
                 Expense.expense_date >= start,
                 Expense.expense_date < end,
             )
@@ -395,7 +386,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
             select(Category.name, func.sum(Expense.amount_paise), func.count(Expense.id))
             .join(Expense, Expense.category_id == Category.id)
             .where(
-                Expense.user_id == user_id,
                 Expense.expense_date >= start,
                 Expense.expense_date < end,
             )
@@ -415,7 +405,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
         item = update_expense(
             db,
             int(args["expense_id"]),
-            user_id=user_id,
             amount=args["amount"],
             description=args["description"],
             category_name=args["category"],
@@ -436,7 +425,6 @@ def execute_tool(db, name: str, args: dict, *, user_id: int) -> dict:
         item = update_income(
             db,
             int(args["income_id"]),
-            user_id=user_id,
             amount=args["amount"],
             source=args["source"],
             income_date=_date(args["income_date"]),
